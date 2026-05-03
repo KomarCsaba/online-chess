@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chess</title>
+    <style>
+        body {
+            background-color: #1a1a1a;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        #message {
+            color: white;
+            font-size: 24px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        #status {
+            color: #aaa;
+            font-size: 18px;
+            margin-top: 10px;
+        }
+
+        #board {
+            display: grid;
+            grid-template-columns: repeat(8, 80px);
+            grid-template-rows: repeat(8, 80px);
+            border: 2px solid #555;
+        }
+
+        .square {
+            width: 80px;
+            height: 80px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 52px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .light { background-color: #f0d9b5; }
+        .dark { background-color: #b58863; }
+        .selected { background-color: #7fc97f !important; }
+        .possible-move { background-color: #7fc9c9 !important; }
+        .in-check { background-color: #ff6b6b !important; }
+    </style>
+</head>
+<body>
+    <div id="message">Connecting...</div>
+    <div id="board"></div>
+    <div id="status"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const boardEl = document.getElementById("board");
+        const messageEl = document.getElementById("message");
+        const statusEl = document.getElementById("status");
+
+        let myColor = null;
+        let selectedSquare = null;
+        let currentState = null;
+        let legalMovesForSelected = [];
+
+        // chess piece unicode symbols
+        const PIECES = {
+            "K": "♔", "Q": "♕", "R": "♖", "B": "♗", "N": "♘", "P": "♙",  // white
+            "k": "♚", "q": "♛", "r": "♜", "b": "♝", "n": "♞", "p": "♟"   // black
+        };
+
+        function colRowToUci(col, row) {
+            // convert grid position to chess notation (e.g. 0,0 -> a8)
+            return String.fromCharCode(97 + col) + (8 - row);
+        }
+
+        function buildBoard() {
+            boardEl.innerHTML = "";
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const square = document.createElement("div");
+                    square.className = "square " + ((row + col) % 2 === 0 ? "light" : "dark");
+                    square.dataset.col = col;
+                    square.dataset.row = row;
+                    square.addEventListener("click", onSquareClick);
+                    boardEl.appendChild(square);
+                }
+            }
+        }
+
+        function updateBoard(state) {
+            currentState = state;
+            const squares = boardEl.querySelectorAll(".square");
+
+            squares.forEach(sq => {
+                const col = parseInt(sq.dataset.col);
+                const row = parseInt(sq.dataset.row);
+                const key = `${col},${row}`;
+
+                // reset classes
+                sq.className = "square " + ((row + col) % 2 === 0 ? "light" : "dark");
+                sq.textContent = "";
+
+                // place piece if there is one
+                if (state.pieces[key]) {
+                    sq.textContent = PIECES[state.pieces[key].type];
+                }
+
+                // highlight king in check
+                if (state.in_check) {
+                    const kingSymbol = state.turn === "white" ? "K" : "k";
+                    if (state.pieces[key] && state.pieces[key].type === kingSymbol) {
+                        sq.classList.add("in-check");
+                    }
+                }
+
+                // highlight selected square
+                if (selectedSquare && selectedSquare.col === col && selectedSquare.row === row) {
+                    sq.classList.add("selected");
+                }
+
+                // highlight possible moves
+                if (legalMovesForSelected.includes(`${col},${row}`)) {
+                    sq.classList.add("possible-move");
+                }
+            });
+
+            // update status
+            if (myColor) {
+                const isMyTurn = state.turn === myColor;
+                statusEl.textContent = isMyTurn ? "Your turn" : "Opponent's turn";
+            }
+        }
+
+        function getLegalMovesForSquare(col, row) {
+            // ask server for legal moves would be ideal but for now
+            // we just let the server validate and show all squares as possible
+            // this is simplified - we'll just highlight nothing for now
+            return [];
+        }
+
+        function onSquareClick(e) {
+            if (!currentState || !myColor) return;
+            if (currentState.turn !== myColor) return;  // not our turn
+
+            const col = parseInt(e.currentTarget.dataset.col);
+            const row = parseInt(e.currentTarget.dataset.row);
+            const key = `${col},${row}`;
+            const piece = currentState.pieces[key];
+
+            if (selectedSquare === null) {
+                // select a piece if it belongs to us
+                if (piece && piece.color === myColor) {
+                    selectedSquare = { col, row };
+                    updateBoard(currentState);
+                }
+            } else {
+                // try to move selected piece to this square
+                const from = colRowToUci(selectedSquare.col, selectedSquare.row);
+                const to = colRowToUci(col, row);
+                const move = from + to;
+
+                // handle pawn promotion automatically to queen
+                const pieceAtFrom = currentState.pieces[`${selectedSquare.col},${selectedSquare.row}`];
+                if (pieceAtFrom && pieceAtFrom.type.toLowerCase() === "p") {
+                    if ((myColor === "white" && row === 0) || (myColor === "black" && row === 7)) {
+                        socket.emit("move", { move: move + "q" });
+                        selectedSquare = null;
+                        updateBoard(currentState);
+                        return;
+                    }
+                }
+
+                socket.emit("move", { move });
+                selectedSquare = null;
+                updateBoard(currentState);
+            }
+        }
+
+        // --- SOCKET EVENTS ---
+
+        socket.on("waiting", data => {
+            myColor = data.color;
+            messageEl.textContent = "Waiting for an opponent...";
+            buildBoard();
+        });
+
+        socket.on("start", data => {
+            myColor = data.color;
+            messageEl.textContent = `You are playing as ${myColor}`;
+            buildBoard();
+        });
+
+        socket.on("board_state", state => {
+            updateBoard(state);
+        });
+
+        socket.on("invalid_move", () => {
+            selectedSquare = null;
+            updateBoard(currentState);
+        });
+
+        socket.on("game_over", data => {
+            messageEl.textContent = data.result;
+            statusEl.textContent = "Refresh to play again";
+            currentState = null;
+        });
+
+        socket.on("opponent_left", () => {
+            messageEl.textContent = "Opponent disconnected!";
+            statusEl.textContent = "Refresh to play again";
+        });
+    </script>
+</body>
+</html>
