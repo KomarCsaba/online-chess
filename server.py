@@ -130,6 +130,29 @@ def on_move(data):
         print(f"Move error: {e}")
         emit("invalid_move", {})
 
+@socketio.on("get_moves")
+def on_get_moves(data):
+    if request.sid not in players:
+        return
+
+    game_id = players[request.sid]
+    board = games[game_id]["board"]
+
+    # convert col,row to chess square
+    col = data["col"]
+    row = data["row"]
+    square = chess.square(col, 7 - row)
+
+    # get all legal moves from this square
+    moves = []
+    for move in board.legal_moves:
+        if move.from_square == square:
+            to_col = chess.square_file(move.to_square)
+            to_row = 7 - chess.square_rank(move.to_square)
+            moves.append(f"{to_col},{to_row}")
+
+    emit("legal_moves", {"moves": moves})
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host="0.0.0.0", port=port, debug=True)

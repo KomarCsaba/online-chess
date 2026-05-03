@@ -149,7 +149,7 @@
 
         function onSquareClick(e) {
             if (!currentState || !myColor) return;
-            if (currentState.turn !== myColor) return;  // not our turn
+            if (currentState.turn !== myColor) return;
 
             const col = parseInt(e.currentTarget.dataset.col);
             const row = parseInt(e.currentTarget.dataset.row);
@@ -160,32 +160,45 @@
                 // select a piece if it belongs to us
                 if (piece && piece.color === myColor) {
                     selectedSquare = { col, row };
+                    // ask server for legal moves
+                    socket.emit("get_moves", { col, row });
                     updateBoard(currentState);
                 }
             } else {
-                // try to move selected piece to this square
+                // if clicking our own piece, select that instead
+                if (piece && piece.color === myColor) {
+                    selectedSquare = { col, row };
+                    legalMovesForSelected = [];
+                    socket.emit("get_moves", { col, row });
+                    updateBoard(currentState);
+                    return;
+                }
+
+                // try to move
                 const from = colRowToUci(selectedSquare.col, selectedSquare.row);
                 const to = colRowToUci(col, row);
-                const move = from + to;
+                let move = from + to;
 
-                // handle pawn promotion automatically to queen
+                // handle pawn promotion
                 const pieceAtFrom = currentState.pieces[`${selectedSquare.col},${selectedSquare.row}`];
                 if (pieceAtFrom && pieceAtFrom.type.toLowerCase() === "p") {
                     if ((myColor === "white" && row === 0) || (myColor === "black" && row === 7)) {
-                        socket.emit("move", { move: move + "q" });
-                        selectedSquare = null;
-                        updateBoard(currentState);
-                        return;
+                        move += "q";
                     }
                 }
 
                 socket.emit("move", { move });
                 selectedSquare = null;
+                legalMovesForSelected = [];
                 updateBoard(currentState);
             }
         }
 
-        // --- SOCKET EVENTS ---
+        // receive legal moves from server and highlight them
+        socket.on("legal_moves", data => {
+            legalMovesForSelected = data.moves;
+            updateBoard(currentState);
+        });
 
         socket.on("waiting", data => {
             myColor = data.color;
