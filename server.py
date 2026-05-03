@@ -40,10 +40,18 @@ def send_board_state(game_id):
                 "color": "white" if piece.color == chess.WHITE else "black"
             }
 
+    # get move history in standard chess notation
+    move_history = []
+    temp_board = chess.Board()
+    for move in game["board"].move_stack:
+        move_history.append(temp_board.san(move))
+        temp_board.push(move)
+
     state = {
         "pieces": pieces,
         "turn": "white" if game["board"].turn == chess.WHITE else "black",
-        "in_check": game["board"].is_check()
+        "in_check": game["board"].is_check(),
+        "moves": move_history
     }
 
     # send to all players in this game

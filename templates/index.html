@@ -14,42 +14,104 @@
             font-family: Arial, sans-serif;
         }
 
-        #message {
-            color: white;
-            font-size: 24px;
-            margin-bottom: 20px;
-            text-align: center;
-        }
+                #message {
+                    color: white;
+                    font-size: 24px;
+                    margin-bottom: 20px;
+                    text-align: center;
+                }
 
-        #status {
-            color: #aaa;
-            font-size: 18px;
-            margin-top: 10px;
-        }
+                #status {
+                    color: #aaa;
+                    font-size: 18px;
+                    margin-top: 10px;
+                }
 
-        #board {
-            display: grid;
-            grid-template-columns: repeat(8, 80px);
-            grid-template-rows: repeat(8, 80px);
-            border: 2px solid #555;
-        }
+                #board {
+                    display: grid;
+                    grid-template-columns: repeat(8, 80px);
+                    grid-template-rows: repeat(8, 80px);
+                    border: 2px solid #555;
+                }
 
-        .square {
-            width: 80px;
-            height: 80px;
+                .square {
+                    width: 80px;
+                    height: 80px;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    font-size: 52px;
+                    cursor: pointer;
+                    user-select: none;
+                }
+
+                .light { background-color: #f0d9b5; }
+                .dark { background-color: #b58863; }
+                .selected { background-color: #7fc97f !important; }
+                .possible-move {position: relative;}
+                .possible-move::after {
+                    content: "";
+                    position: absolute;
+                    width: 30%;
+                    height: 30%;
+                    background-color: rgba(0, 0, 0, 0.2);
+                    border-radius: 50%;
+                }
+                .possible-move.has-piece::after {
+                    width: 100%;
+                    height: 100%;
+                    background-color: transparent;
+                    border-radius: 50%;
+                    box-shadow: inset 0 0 0 6px rgba(0, 0, 0, 0.2);
+                }
+                .in-check { background-color: #ff6b6b !important; }
+                #container {
             display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 52px;
-            cursor: pointer;
-            user-select: none;
+            gap: 20px;
+            align-items: flex-start;
         }
 
-        .light { background-color: #f0d9b5; }
-        .dark { background-color: #b58863; }
-        .selected { background-color: #7fc97f !important; }
-        .possible-move { background-color: #7fc9c9 !important; }
-        .in-check { background-color: #ff6b6b !important; }
+        #move-list {
+            width: 180px;
+            height: 640px;
+            background-color: #2a2a2a;
+            border-radius: 8px;
+            padding: 10px;
+            overflow-y: auto;
+            color: white;
+            font-size: 14px;
+            font-family: Arial;
+        }
+
+        #move-list h3 {
+            margin: 0 0 10px 0;
+            color: #aaa;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .move-row {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 4px;
+        }
+
+        .move-number {
+            color: #666;
+            width: 25px;
+        }
+
+        .move-white, .move-black {
+            width: 65px;
+            padding: 2px 4px;
+            border-radius: 3px;
+            cursor: default;
+        }
+
+        .move-white:hover, .move-black:hover {
+            background-color: #3a3a3a;
+        }
     </style>
 </head>
 <body>
@@ -97,48 +159,82 @@
         }
 
         function updateBoard(state) {
-            currentState = state;
-            const squares = boardEl.querySelectorAll(".square");
+    currentState = state;
+        const squares = boardEl.querySelectorAll(".square");
 
-            squares.forEach(sq => {
-                const col = parseInt(sq.dataset.col);
-                const row = parseInt(sq.dataset.row);
-                const key = `${col},${row}`;
+        squares.forEach(sq => {
+            const col = parseInt(sq.dataset.col);
+            const row = parseInt(sq.dataset.row);
+            const key = `${col},${row}`;
 
-                // reset classes
-                sq.className = "square " + ((row + col) % 2 === 0 ? "light" : "dark");
-                sq.textContent = "";
+            // reset classes
+            sq.className = "square " + ((row + col) % 2 === 0 ? "light" : "dark");
+            sq.textContent = "";
 
-                // place piece if there is one
-                if (state.pieces[key]) {
-                    sq.textContent = PIECES[state.pieces[key].type];
-                }
-
-                // highlight king in check
-                if (state.in_check) {
-                    const kingSymbol = state.turn === "white" ? "K" : "k";
-                    if (state.pieces[key] && state.pieces[key].type === kingSymbol) {
-                        sq.classList.add("in-check");
-                    }
-                }
-
-                // highlight selected square
-                if (selectedSquare && selectedSquare.col === col && selectedSquare.row === row) {
-                    sq.classList.add("selected");
-                }
-
-                // highlight possible moves
-                if (legalMovesForSelected.includes(`${col},${row}`)) {
-                    sq.classList.add("possible-move");
-                }
-            });
-
-            // update status
-            if (myColor) {
-                const isMyTurn = state.turn === myColor;
-                statusEl.textContent = isMyTurn ? "Your turn" : "Opponent's turn";
+            // place piece if there is one
+            if (state.pieces[key]) {
+                sq.textContent = PIECES[state.pieces[key].type];
             }
+
+            // highlight king in check
+            if (state.in_check) {
+                const kingSymbol = state.turn === "white" ? "K" : "k";
+                if (state.pieces[key] && state.pieces[key].type === kingSymbol) {
+                    sq.classList.add("in-check");
+                }
+            }
+
+            // highlight selected square
+            if (selectedSquare && selectedSquare.col === col && selectedSquare.row === row) {
+                sq.classList.add("selected");
+            }
+
+            // highlight possible moves
+            if (legalMovesForSelected.includes(`${col},${row}`)) {
+                sq.classList.add("possible-move");
+                if (currentState.pieces[key]) {
+                    sq.classList.add("has-piece");
+                }
+            }
+        });
+
+        // update status
+        if (myColor) {
+            const isMyTurn = state.turn === myColor;
+            statusEl.textContent = isMyTurn ? "Your turn" : "Opponent's turn";
         }
+
+        // update move list
+        const movesEl = document.getElementById("moves");
+        movesEl.innerHTML = "";
+        for (let i = 0; i < state.moves.length; i += 2) {
+            const row = document.createElement("div");
+            row.className = "move-row";
+
+            const number = document.createElement("span");
+            number.className = "move-number";
+            number.textContent = `${Math.floor(i/2) + 1}.`;
+
+            const white = document.createElement("span");
+            white.className = "move-white";
+            white.textContent = state.moves[i];
+
+            row.appendChild(number);
+            row.appendChild(white);
+
+            if (state.moves[i+1]) {
+                const black = document.createElement("span");
+                black.className = "move-black";
+                black.textContent = state.moves[i+1];
+                row.appendChild(black);
+            }
+
+            movesEl.appendChild(row);
+        }
+
+        // auto scroll to bottom
+        movesEl.scrollTop = movesEl.scrollHeight;
+    }
 
         function getLegalMovesForSquare(col, row) {
             // ask server for legal moves would be ideal but for now
